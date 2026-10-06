@@ -55,7 +55,7 @@
       if (lo === "е") {
         m = (!isLetter(prev) || VOWELS.indexOf(prevLo) >= 0 || prevLo === "ъ" || prevLo === "ь") ? "ye" : "e";
       } else if (lo === "ц") {
-        m = VOWELS.indexOf(prevLo) >= 0 ? "ts" : "s";
+        m = prevLo && VOWELS.indexOf(prevLo) >= 0 ? "ts" : "s";
       } else {
         m = MAP[lo];
         if (m === undefined) m = ch;
@@ -69,8 +69,18 @@
     return out;
   }
 
-  var prefs = { script: "cyr", last: null };
-  try { Object.assign(prefs, JSON.parse(localStorage.getItem("gt_prefs") || "{}")); } catch (e) {}
+  var prefs = { script: "lat", chosen: false, last: null, fs: true };
+  try {
+    var savedPrefs = JSON.parse(localStorage.getItem("gt_prefs") || "{}");
+    if (savedPrefs.script && savedPrefs.chosen === undefined) savedPrefs.chosen = true;
+    Object.assign(prefs, savedPrefs);
+  } catch (e) {}
+  // Ҳавола орқали ёзувни танлаш: ...?lat / ...?cyr ёки startapp=lat, startapp=cyr_c12
+  var START = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "";
+  (function () {
+    var m = /(?:^|[?&_])(lat|cyr)(?:$|[&_=])/.exec(location.search + "&" + START);
+    if (m) { prefs.script = m[1]; prefs.chosen = true; }
+  })();
   function savePrefs() { try { localStorage.setItem("gt_prefs", JSON.stringify(prefs)); } catch (e) {} }
   function T(s) { return prefs.script === "lat" ? toLatin(String(s)) : String(s); }
   function E(s) { return esc(T(s)); }
@@ -156,12 +166,12 @@
         });
       },
       get: function (k) { return (data[k] && data[k].v) || {}; },
-      set: function (k, v) {
+      set: function (k, v, silent) {
         data[k] = { u: Date.now(), v: v };
         try { localStorage.setItem(LS + k, JSON.stringify(data[k])); } catch (e) {}
         clearTimeout(timers[k]);
         timers[k] = setTimeout(function () { writeCloud(k, data[k]); }, 700);
-        flash();
+        if (!silent) flash();
       },
       all: function () { return data; },
       replaceAll: function (obj) {
@@ -235,31 +245,65 @@
 
   /* ================= Навигация ================= */
 
-  function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
+  var TABS = ["home", "sections", "search", "notes", "settings"];
+  var stack = [];          // илова ичидаги ўтишлар тарихи (анимация йўналиши ва «Орқага» учун)
+  var scrollMem = {};      // ҳар бир саҳифанинг скролл ҳолати
+  var navDir = "fade";
+
+  function go(hash, opts) {
+    opts = opts || {};
+    if (location.hash === hash) return render();
+    if (opts.replace) { stack = []; location.replace(hash); }
+    else location.hash = hash;
+  }
   function route() {
     var h = (location.hash || "#/").replace(/^#/, "");
     var p = h.split("/").filter(Boolean);
-    return { name: p[0] || "home", arg: p[1] };
+    var name = p[0] || "home";
+    if (name === "export") name = "settings";
+    if (!prefs.chosen) name = "welcome";
+    return { name: name, arg: p[1] };
+  }
+  function depth(r) {
+    if (r.name === "c") return 2;
+    if (r.name === "s" || r.name === "guide" || r.name === "intro") return 1;
+    return 0;
+  }
+  function parentHash(r) {
+    if (r.name === "c") { var c = CARD_BY_N[r.arg]; return c ? "#/s/" + c.sec.id : "#/"; }
+    return "#/";
   }
 
-  function setChrome(title, isHome) {
+  function setChrome(title, r) {
+    var root = depth(r) === 0;
     document.getElementById("topTitle").textContent = T(title || "");
-    $top.classList.toggle("always", !isHome);
-    var showBack = !isHome;
+    $top.classList.toggle("always", r.name !== "home");
+    $top.hidden = r.name === "welcome";
+    var showBack = !root;
     if (inTG && tg.BackButton) {
       if (showBack) tg.BackButton.show(); else tg.BackButton.hide();
       document.getElementById("backBtn").hidden = true;
     } else {
       document.getElementById("backBtn").hidden = !showBack;
     }
-    document.getElementById("scriptBtn").textContent = prefs.script === "lat" ? "Lot" : "Кир";
+    document.getElementById("scriptBtn").textContent = prefs.script === "lat" ? "Lotin" : "Кирилл";
     document.getElementById("saved").textContent = "✓ " + T("Сақланди");
+
+    var showTabs = r.name !== "welcome" && r.name !== "c";
+    document.body.classList.toggle("has-tabs", showTabs);
+    var activeTab = TABS.indexOf(r.name) >= 0 ? r.name : (r.name === "s" ? "sections" : "home");
+    document.querySelectorAll("#tabbar [data-tab]").forEach(function (b) {
+      var on = b.getAttribute("data-tab") === activeTab;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-current", on ? "page" : "false");
+      var lab = b.querySelector("span");
+      lab.textContent = T(lab.getAttribute("data-l"));
+    });
   }
 
   function back() {
-    var r = route();
-    if (r.name === "c") { var c = CARD_BY_N[r.arg]; go(c ? "#/s/" + c.sec.id : "#/"); }
-    else go("#/");
+    if (stack.length > 1) history.back();
+    else go(parentHash(route()), { replace: true });
   }
 
   /* ================= Кўринишлар ================= */
@@ -318,17 +362,15 @@
     });
     h += "</div>";
 
-    h += '<div class="section-label">' + E("Сақлаш ва улашиш") + "</div>";
-    h += '<div class="footer-links">';
-    h += '<button class="btn" data-go="#/export">📤 ' + E("Экспорт / захира") + "</button>";
-    h += '<button class="btn" data-go="#/search">🔎 ' + E("Қидириш") + "</button>";
-    h += "</div>";
-    h += '<p class="muted small" style="margin:10px 4px 0">' + E(Store.cloud
-      ? "☁️ Жавоблар Telegram булутида сақланади — бошқа қурилмада ҳам очилади."
-      : "📱 Жавоблар шу қурилмада сақланади. Telegram орқали очсангиз, булутда ҳам сақланади.") + "</p>";
+    h += '<p class="muted small" style="margin:16px 4px 0">' + E(storageNote()) + "</p>";
 
     h += '<div class="brand-foot"><b>' + esc(WB.brand.toUpperCase()) + "</b><br>" + esc(WB.site) + "</div>";
     return { title: WB.title, home: true, html: h };
+  }
+  function storageNote() {
+    return Store.cloud
+      ? "☁️ Жавоблар автоматик равишда Telegram булутида сақланади — бошқа қурилмада ҳам очилади."
+      : "📱 Жавоблар автоматик равишда шу қурилмада сақланади. Telegram орқали очсангиз, булутда ҳам сақланади.";
   }
   function tile(href, ico, title, sub) {
     return '<button class="tile" data-go="' + href + '"><span class="t-ico">' + ico + "</span><b>" + E(title) + "</b><small>" + E(sub) + "</small></button>";
@@ -675,11 +717,35 @@
     return out.join("\n\n");
   }
 
-  function viewExport() {
-    var h = '<div class="sec-head"><div class="sec-roman">📤 ' + E("Сақлаш") + "</div><h1>" + E("Экспорт ва захира") + '</h1><p class="sec-sub">' +
-      E("Жавобларингизни нусхалаб тренерга юборинг ёки захира нусха сақлаб қўйинг.") + "</p></div>";
+  var installPrompt = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); installPrompt = e; });
+
+  function viewSettings() {
+    var h = '<div class="sec-head"><div class="sec-roman">⚙️ ' + E("Созламалар") + "</div><h1>" + E("Созламалар") + "</h1></div>";
+    h += '<div class="section-label">' + E("Ёзув") + "</div>";
+    h += '<div class="seg">' +
+      '<button data-script="lat" class="' + (prefs.script === "lat" ? "on" : "") + '"><b>Lotin</b><small>Oʻzbekcha</small></button>' +
+      '<button data-script="cyr" class="' + (prefs.script === "cyr" ? "on" : "") + '"><b>Кирилл</b><small>Ўзбекча</small></button></div>';
+
+    h += '<div class="section-label">' + E("Илова") + '</div><div class="card rows">';
+    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0") && tg.requestFullscreen) {
+      h += '<button class="row" id="fsToggle"><span class="row-ico">⛶</span><span class="row-t"><b>' + E("Тўлиқ экран") + "</b><small>" +
+        E("Telegram'да очилганда бутун экранни эгаллайди") + '</small></span><span class="switch' + (tg.isFullscreen ? " on" : "") + '"><i></i></span></button>';
+    }
+    if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast("8.0") && tg.addToHomeScreen) {
+      h += '<button class="row" id="homeBtn"><span class="row-ico">📲</span><span class="row-t"><b>' + E("Бош экранга қўшиш") + "</b><small id=\"homeStatus\">" +
+        E("Дафтарни телефон экранидан илова каби очинг") + "</small></span>" + CHEV + "</button>";
+    }
+    if (!inTG) {
+      h += '<button class="row" id="installBtn"' + (installPrompt ? "" : " hidden") + '><span class="row-ico">📲</span><span class="row-t"><b>' + E("Иловани ўрнатиш") + "</b><small>" +
+        E("Бош экранга илова сифатида қўшиш") + "</small></span>" + CHEV + "</button>";
+    }
+    h += '<div class="row static"><span class="row-ico">' + (Store.cloud ? "☁️" : "📱") + '</span><span class="row-t"><b>' + E("Автоматик сақлаш") + "</b><small>" +
+      E(storageNote().replace(/^\S+\s/, "")) + "</small></span></div>";
+    h += "</div>";
+
     h += '<div class="section-label">' + E("Жавоблар матни") + "</div>";
-    h += '<div class="card stack"><p class="muted small" style="margin:0">' + E("Барча тўлдирилган карталар битта матнга йиғилади. Уни исталган чатга (масалан, «Избранное»га) жойлаштиришингиз мумкин.") + "</p>";
+    h += '<div class="card stack"><p class="muted small" style="margin:0">' + E("Барча тўлдирилган карталар битта матнга йиғилади. Уни исталган чатга (масалан, «Сақланган хабарлар»га) жойлаштиришингиз мумкин.") + "</p>";
     h += '<button class="btn primary" id="copyAll" style="width:100%">📋 ' + E("Барча жавобларни нусхалаш") + "</button>";
     if (!inTG) h += '<button class="btn" id="dlAll" style="width:100%">⬇️ ' + E("Файл (.txt) сифатида юклаб олиш") + "</button>";
     h += "</div>";
@@ -692,29 +758,141 @@
 
     h += '<div class="section-label">' + E("Хавфли ҳудуд") + "</div>";
     h += '<button class="btn danger" id="wipe" style="width:100%">🗑 ' + E("Барча жавобларни ўчириш") + "</button>";
-    return { title: "Экспорт ва захира", html: h };
+    h += '<div class="brand-foot"><b>' + esc(WB.brand.toUpperCase()) + "</b><br>" + esc(WB.site) + "</div>";
+    return { title: "Созламалар", html: h };
+  }
+
+  function setScript(sc) {
+    if (prefs.script === sc) return;
+    prefs.script = sc;
+    prefs.chosen = true;
+    savePrefs();
+    Store.set("prefs", { script: sc }, true);
+    haptic();
+    var y = window.scrollY;
+    navDir = "none";
+    lastRoute = null;
+    render();
+    window.scrollTo(0, y);
+    toast(sc === "lat" ? "Lotin yozuvi" : "Кирилл ёзуви");
+  }
+
+  function setFullscreen(on) {
+    prefs.fs = on; savePrefs();
+    try { if (on) tg.requestFullscreen(); else tg.exitFullscreen(); } catch (e) {}
+  }
+
+  function bindSettings() {
+    bindExport();
+    $app.querySelectorAll("[data-script]").forEach(function (b) {
+      b.addEventListener("click", function () { setScript(b.getAttribute("data-script")); });
+    });
+    var fs = document.getElementById("fsToggle");
+    if (fs) fs.addEventListener("click", function () { setFullscreen(!tg.isFullscreen); haptic(); });
+    var hb = document.getElementById("homeBtn");
+    if (hb) {
+      try {
+        tg.checkHomeScreenStatus(function (st) {
+          if (st === "added") document.getElementById("homeStatus").textContent = T("✓ Бош экранга қўшилган");
+          if (st === "unsupported") hb.hidden = true;
+        });
+      } catch (e) {}
+      hb.addEventListener("click", function () { try { tg.addToHomeScreen(); } catch (e) {} });
+    }
+    var ib = document.getElementById("installBtn");
+    if (ib) ib.addEventListener("click", function () {
+      if (!installPrompt) return;
+      installPrompt.prompt();
+      installPrompt = null;
+      ib.hidden = true;
+    });
+  }
+
+  /* ---------- Биринчи очилиш: ёзувни танлаш ---------- */
+
+  function viewWelcome() {
+    var h = '<div class="welcome">';
+    h += '<div class="w-logo"><svg viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" rx="18" fill="#254C3B"/><path d="M19 17h19a7 7 0 0 1 7 7v23H26a7 7 0 0 1-7-7z" fill="none" stroke="#C99A5B" stroke-width="4" stroke-linejoin="round"/><path d="M26 27h12M26 34h9" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></div>';
+    h += '<div class="w-kicker">GLOBALTRAININGS</div>';
+    h += "<h1>Shaxsiy rivojlanish tizimi</h1><p class=\"w-alt\">Шахсий ривожланиш тизими</p>";
+    h += '<p class="w-ask">Yozuvni tanlang <i>·</i> Ёзувни танланг</p>';
+    h += '<button class="w-opt" data-pick="lat"><span class="w-ab">Aa</span><span><b>Lotin</b><small>Oʻzbekcha · lotin yozuvi</small></span>' + CHEV + "</button>";
+    h += '<button class="w-opt" data-pick="cyr"><span class="w-ab">Аа</span><span><b>Кирилл</b><small>Ўзбекча · кирилл ёзуви</small></span>' + CHEV + "</button>";
+    h += '<p class="w-note">Keyinroq sozlamalardan oʻzgartirish mumkin<br>Кейинроқ созламалардан ўзгартириш мумкин</p>';
+    h += "</div>";
+    return { title: "", html: h };
+  }
+  function bindWelcome() {
+    $app.querySelectorAll("[data-pick]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        prefs.script = b.getAttribute("data-pick");
+        prefs.chosen = true;
+        savePrefs();
+        Store.set("prefs", { script: prefs.script }, true);
+        haptic("ok");
+        stack = [];
+        lastRoute = null;
+        render();
+      });
+    });
+  }
+
+  /* ---------- Мундарижа ---------- */
+
+  function viewSections() {
+    var h = '<div class="sec-head"><div class="sec-roman">📚 ' + E("Мундарижа") + "</div><h1>" + E("Бўлимлар ва карталар") + '</h1><p class="sec-sub">' +
+      E("Бўлимлар ўзини кузатишдан бошлаб автоном ривожланиш ва ижтимоий ҳиссагача бўлган мантиқда жойлаштирилган.") + "</p></div>";
+    WB.sections.forEach(function (s) {
+      var st = secStat(s);
+      h += '<div class="toc"><button class="toc-h" data-go="#/s/' + s.id + '"><span class="badge">' + esc(s.roman) + '</span><span class="sec-body"><b>' + E(s.title) +
+        "</b><small>" + st.done + "/" + st.total + " " + E("якунланган") + "</small></span>" + CHEV + "</button>";
+      h += '<div class="toc-cards">';
+      s.cards.forEach(function (c) {
+        var cs = cardStat(c);
+        h += '<button class="toc-c' + (cs.done ? " done" : cs.filled ? " part" : "") + '" data-go="#/c/' + c.n + '"><span class="dot">' + c.n + "</span><span>" + E(c.t) + "</span></button>";
+      });
+      h += "</div></div>";
+    });
+    return { title: "Бўлимлар", html: h };
   }
 
   /* ================= Чизиш ================= */
 
+  var lastRoute = null;
   function render() {
     var r = route();
+    var hash = location.hash || "#/";
+    // Йўналиш: орқага / олдинга / таблар орасида
+    if (lastRoute) scrollMem[lastRoute.hash] = window.scrollY;
+    var isBack = stack.length > 1 && stack[stack.length - 2] === hash;
+    if (isBack) stack.pop();
+    else if (stack[stack.length - 1] !== hash) stack.push(hash);
+    if (stack.length > 50) stack = stack.slice(-50);
+    if (!lastRoute || r.name === "welcome" || lastRoute.r.name === "welcome") navDir = "fade";
+    else if (isBack || depth(r) < depth(lastRoute.r)) navDir = "back";
+    else if (depth(r) > depth(lastRoute.r) || (r.name === "c" && lastRoute.r.name === "c")) navDir = "fwd";
+    else navDir = "fade";
+    if (r.name === "c" && lastRoute && lastRoute.r.name === "c" && +r.arg < +lastRoute.r.arg) navDir = "back";
+
     var v;
-    if (r.name === "s") v = viewSection(r.arg);
+    if (r.name === "welcome") v = viewWelcome();
+    else if (r.name === "s") v = viewSection(r.arg);
     else if (r.name === "c") v = viewCard(r.arg);
+    else if (r.name === "sections") v = viewSections();
     else if (r.name === "guide") v = viewGuide();
     else if (r.name === "intro") v = viewIntro();
     else if (r.name === "notes") v = viewNotes();
     else if (r.name === "search") v = viewSearch();
-    else if (r.name === "export") v = viewExport();
+    else if (r.name === "settings") v = viewSettings();
     else v = viewHome();
-    $app.innerHTML = '<div class="view">' + v.html + "</div>";
-    setChrome(v.title, !!v.home);
-    document.title = T(v.home ? "Иш дафтари" : v.title) + " — GlobalTrainings";
-    window.scrollTo(0, 0);
-    onScroll();
+    $app.innerHTML = '<div class="view ' + navDir + '">' + v.html + "</div>";
+    setChrome(v.title, r);
+    document.title = T(r.name === "home" ? "Иш дафтари" : v.title) + " — GlobalTrainings";
     $app.querySelectorAll("textarea").forEach(grow);
+    window.scrollTo(0, isBack ? (scrollMem[hash] || 0) : 0);
+    onScroll();
     bindView(r, v);
+    lastRoute = { r: r, hash: hash };
   }
 
   function grow(el) {
@@ -732,7 +910,8 @@
         document.getElementById("searchOut").innerHTML = searchResults(searchQ);
       });
     }
-    if (r.name === "export") bindExport();
+    if (r.name === "settings") bindSettings();
+    if (r.name === "welcome") bindWelcome();
   }
 
   function bindCard(c) {
@@ -937,15 +1116,26 @@
   window.addEventListener("scroll", onScroll, { passive: true });
 
   document.getElementById("backBtn").addEventListener("click", back);
-  document.getElementById("searchBtn").addEventListener("click", function () { go("#/search"); });
   document.getElementById("scriptBtn").addEventListener("click", function () {
-    prefs.script = prefs.script === "lat" ? "cyr" : "lat";
-    savePrefs();
+    setScript(prefs.script === "lat" ? "cyr" : "lat");
+  });
+  document.getElementById("tabbar").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-tab]");
+    if (!b) return;
+    var t = b.getAttribute("data-tab");
     haptic();
-    var y = window.scrollY;
-    render();
-    window.scrollTo(0, y);
-    toast(prefs.script === "lat" ? "Lotin yozuvi" : "Кирилл ёзуви");
+    if (route().name === t) return window.scrollTo({ top: 0, behavior: "smooth" });
+    go(t === "home" ? "#/" : "#/" + t, { replace: true });
+  });
+  // Клавиатура очиқлигида пастки менюни яшириш
+  document.addEventListener("focusin", function (e) {
+    if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) document.body.classList.add("kb");
+  });
+  document.addEventListener("focusout", function () {
+    setTimeout(function () {
+      var a = document.activeElement;
+      if (!a || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) document.body.classList.remove("kb");
+    }, 80);
   });
   window.addEventListener("hashchange", render);
 
@@ -956,6 +1146,23 @@
       if (tg.isVersionAtLeast("7.7") && tg.disableVerticalSwipes) tg.disableVerticalSwipes();
       if (tg.BackButton) tg.BackButton.onClick(back);
       tg.onEvent("themeChanged", applyTheme);
+      if (tg.isVersionAtLeast("7.0") && tg.SettingsButton) {
+        tg.SettingsButton.show();
+        tg.SettingsButton.onClick(function () { go("#/settings", { replace: true }); });
+      }
+      // Мобил Telegram'да тўлиқ экран режими
+      var mobile = /^(android|android_x|ios)$/.test(tg.platform || "");
+      if (tg.isVersionAtLeast("8.0") && tg.requestFullscreen && mobile && prefs.fs !== false && !tg.isFullscreen) {
+        tg.requestFullscreen();
+      }
+      var syncFs = function () {
+        document.documentElement.classList.toggle("tg-fullscreen", !!tg.isFullscreen);
+        var sw = document.querySelector("#fsToggle .switch");
+        if (sw) sw.classList.toggle("on", !!tg.isFullscreen);
+      };
+      tg.onEvent("fullscreenChanged", syncFs);
+      tg.onEvent("fullscreenFailed", syncFs);
+      syncFs();
     } catch (e) {}
   }
   applyTheme();
@@ -965,12 +1172,21 @@
   }
 
   // Telegram орқали «startapp=c12» параметри билан тўғридан-тўғри картани очиш
-  var start = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
-  if (start && !location.hash) {
-    var m = /^c(\d+)$/.exec(start), s = /^s(\d+)$/.exec(start);
+  if (START && !location.hash) {
+    var m = /(?:^|_)c(\d+)$/.exec(START), s = /(?:^|_)s(\d+)$/.exec(START);
     if (m && CARD_BY_N[m[1]]) location.hash = "#/c/" + m[1];
     else if (s && secById(s[1])) location.hash = "#/s/" + s[1];
   }
 
-  Store.load().then(render, render);
+  function boot() {
+    // Ёзув танлови бошқа қурилмадан (Telegram булутидан) келган бўлса
+    var cp = Store.get("prefs");
+    if (!prefs.chosen && cp.script) { prefs.script = cp.script; prefs.chosen = true; savePrefs(); }
+    render();
+  }
+  Store.load().then(boot, boot);
+
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
 })();

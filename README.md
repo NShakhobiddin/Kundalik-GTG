@@ -6,7 +6,10 @@ GlobalTrainings «Shaxsiy rivojlanish tizimi» kursi ishtirokchisining ish dafta
 
 - **54 ta karta** — har bir savol, jadval, belgilash ro'yxati va formula to'ldiriladigan maydonga aylantirilgan.
 - **Avtomatik saqlash** — Telegram ichida javoblar **Telegram CloudStorage**'ga yoziladi (boshqa qurilmada ham ochiladi), qo'shimcha ravishda qurilmada ham saqlanadi.
-- **Kirill / Lotin** — yuqoridagi «Кир / Lot» tugmasi bilan butun daftar yozuvini almashtirish.
+- **Lotin va Kirill** — birinchi ochilishda yozuv tanlanadi (standart: Lotin). Keyin yuqoridagi tugma yoki *Sozlamalar* orqali bir bosishda almashtiriladi. Tanlov Telegram bulutida saqlanadi.
+- **Ilova kabi** — pastki menyu (Asosiy, Bo'limlar, Qidirish, Qaydlar, Sozlamalar), sahifalar orasida silliq o'tishlar, orqaga qaytganda ro'yxatdagi joy saqlanadi, yozayotganda menyu yashirinadi.
+- **To'liq ekran** — Telegram (Android/iOS, Bot API 8.0+) ichida ochilganda butun ekranni egallaydi; Sozlamalarda o'chirib qo'yish mumkin. «Bosh ekranga qo'shish» tugmasi orqali telefon ekraniga ikonka sifatida qo'yiladi.
+- **Oflayn** — bir marta ochilgandan keyin internetsiz ham ishlaydi (service worker). Brauzerda PWA sifatida o'rnatish mumkin.
 - **Progress** — har bir karta va bo'lim bo'yicha to'ldirilganlik, «Kartani yakunladim» belgisi.
 - **«Qayerdan boshlash?»** — vaziyatga qarab bo'limni tanlash yo'l ko'rsatkichi.
 - **Qidiruv** — kirill yoki lotinda yozsa ham kartalar, savollar va o'z javoblaringiz bo'yicha.
@@ -21,6 +24,7 @@ GlobalTrainings «Shaxsiy rivojlanish tizimi» kursi ishtirokchisining ish dafta
 | `style.css` | Dizayn (daftar ranglari: #254C3B yashil, #C99A5B oltin) |
 | `data.js` | Daftar mazmuni — barcha bo'limlar va kartalar |
 | `app.js` | Ilova mantiqi: navigatsiya, saqlash, Telegram integratsiyasi |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Oflayn ishlash va ilova sifatida o'rnatish |
 
 Hech qanday build kerak emas — oddiy statik fayllar.
 
@@ -42,6 +46,10 @@ Hech qanday build kerak emas — oddiy statik fayllar.
 - **Yoki Mini App sifatida:** `/newapp` → botni tanlang → nom, tavsif, rasm → URL → qisqa nom (masalan `daftar`). Shunda havola: `https://t.me/<bot>/daftar`.
 
 Muayyan kartani to'g'ridan-to'g'ri ochish: `https://t.me/<bot>/daftar?startapp=c12` (12-karta) yoki `?startapp=s3` (III bo'lim).
+
+Yozuvni havolada belgilash: `?startapp=lat` yoki `?startapp=cyr`, kartaga birga: `?startapp=lat_c12`. Brauzerda: `.../Kundalik-GTG/?lat` yoki `?cyr`.
+
+> To'liq ekran rejimi BotFather'dagi Mini App sozlamasiga ham bog'liq: `/mybots` → bot → *Bot Settings → Configure Mini App → Enable Fullscreen* (mavjud bo'lsa) ni yoqing.
 
 ## Mazmunni tahrirlash
 
