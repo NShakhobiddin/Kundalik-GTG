@@ -1,6 +1,6 @@
 /* Оффлайн режим: аввал тармоқдан (янги версия), бўлмаса кешдан. */
-var CACHE = "ish-daftari-v2";
-var FILES = ["./", "index.html", "style.css", "data.js", "app.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon.svg"];
+var CACHE = "ish-daftari-v3";
+var FILES = ["./", "index.html", "style.css", "data.js", "config.js", "app.js", "pdf.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon.svg"];
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));

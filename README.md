@@ -13,6 +13,7 @@ GlobalTrainings «Shaxsiy rivojlanish tizimi» kursi ishtirokchisining ish dafta
 - **Progress** — har bir karta va bo'lim bo'yicha to'ldirilganlik, «Kartani yakunladim» belgisi.
 - **«Qayerdan boshlash?»** — vaziyatga qarab bo'limni tanlash yo'l ko'rsatkichi.
 - **Qidiruv** — kirill yoki lotinda yozsa ham kartalar, savollar va o'z javoblaringiz bo'yicha.
+- **PDF** — to'ldirilgan javoblarni chiroyli A4 PDF qilib saqlash: muqova (ism, sana, progress), bo'limlar, jadvallar, belgilangan bandlar, sahifa raqamlari. Butun daftar (Asosiy sahifa yoki Sozlamalar) yoki bitta karta (karta ostidagi «PDF» tugmasi). Faqat to'ldirilgan joylar kiradi.
 - **Ulashish va eksport** — kartani yoki butun daftarni matn qilib nusxalash / chatga yuborish, zaxira kodi orqali tiklash.
 - Telegram mavzusiga moslashadi (yorug' / qorong'i), native «Orqaga» tugmasi, vibratsiya.
 
@@ -24,6 +25,10 @@ GlobalTrainings «Shaxsiy rivojlanish tizimi» kursi ishtirokchisining ish dafta
 | `style.css` | Dizayn (daftar ranglari: #254C3B yashil, #C99A5B oltin) |
 | `data.js` | Daftar mazmuni — barcha bo'limlar va kartalar |
 | `app.js` | Ilova mantiqi: navigatsiya, saqlash, Telegram integratsiyasi |
+| `pdf.js` | PDF yaratish va yetkazish |
+| `vendor/` | pdfmake kutubxonasi va Roboto shrifti (faqat PDF bosilganda yuklanadi) |
+| `config.js` | Ixtiyoriy sozlama: PDF'ni bot orqali chatga yuborish manzili |
+| `worker/pdf-bot.js` | Ixtiyoriy server (Cloudflare Worker) — PDF'ni chatga yuboradi |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Oflayn ishlash va ilova sifatida o'rnatish |
 
 Hech qanday build kerak emas — oddiy statik fayllar.
@@ -50,6 +55,15 @@ Muayyan kartani to'g'ridan-to'g'ri ochish: `https://t.me/<bot>/daftar?startapp=c
 Yozuvni havolada belgilash: `?startapp=lat` yoki `?startapp=cyr`, kartaga birga: `?startapp=lat_c12`. Brauzerda: `.../Kundalik-GTG/?lat` yoki `?cyr`.
 
 > To'liq ekran rejimi BotFather'dagi Mini App sozlamasiga ham bog'liq: `/mybots` → bot → *Bot Settings → Configure Mini App → Enable Fullscreen* (mavjud bo'lsa) ni yoqing.
+
+## PDF qanday yetkaziladi
+
+PDF har doim telefonning o'zida yaratiladi. Telegram ilovalari Mini App ichidan faylni to'g'ridan-to'g'ri yuklab olishga har doim ham ruxsat bermaydi, shuning uchun:
+
+1. **Bot orqali chatga** (eng qulay, ixtiyoriy) — `config.js`'da `pdfApi` berilgan bo'lsa, PDF botdan foydalanuvchiga hujjat sifatida keladi. Sozlash: `worker/pdf-bot.js` faylining boshidagi yo'riqnoma (Cloudflare Workers, bepul tarif yetadi; `BOT_TOKEN` secret sifatida). Foydalanuvchi botga avval `/start` bosgan bo'lishi kerak.
+2. **iPhone** — telefonning «Ulashish» oynasi ochiladi: «Fayllarga saqlash» yoki istalgan chatga yuborish.
+3. **Brauzer / Telegram Desktop** — fayl darhol yuklab olinadi.
+4. **Android (botsiz)** — «Brauzerda ochib yuklab olish» tugmasi: javoblar havolaning `#` qismiga siqib joylanadi (serverga bormaydi), brauzerda PDF yaratilib «Downloads»ga saqlanadi.
 
 ## Mazmunni tahrirlash
 

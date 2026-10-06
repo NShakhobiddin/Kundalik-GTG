@@ -93,6 +93,7 @@
     var cloud = !!(tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast("6.9") && inTG);
     var data = {};
     var timers = {};
+    var readOnly = false;
 
     function readLocal() {
       var out = {};
@@ -167,6 +168,7 @@
       },
       get: function (k) { return (data[k] && data[k].v) || {}; },
       set: function (k, v, silent) {
+        if (readOnly) return;
         data[k] = { u: Date.now(), v: v };
         try { localStorage.setItem(LS + k, JSON.stringify(data[k])); } catch (e) {}
         clearTimeout(timers[k]);
@@ -174,6 +176,8 @@
         if (!silent) flash();
       },
       all: function () { return data; },
+      // Ҳаволадан келган жавобларни фақат кўрсатиш учун (сақламасдан) юклаш
+      snapshot: function (d) { data = d || {}; readOnly = true; },
       replaceAll: function (obj) {
         Object.keys(obj).forEach(function (k) { Store.set(k, obj[k].v || obj[k]); });
       },
@@ -362,6 +366,8 @@
     });
     h += "</div>";
 
+    h += '<button class="pdf-cta" id="pdfHome"><span class="c-ico">PDF</span><span><b>' + E("Жавобларни PDF қилиб сақлаш") + "</b><small>" +
+      E("Барча тўлдирилган карталар — чиройли A4 ҳужжатда") + "</small></span>" + CHEV + "</button>";
     h += '<p class="muted small" style="margin:16px 4px 0">' + E(storageNote()) + "</p>";
 
     h += '<div class="brand-foot"><b>' + esc(WB.brand.toUpperCase()) + "</b><br>" + esc(WB.site) + "</div>";
@@ -425,7 +431,7 @@
     h += "</div>";
 
     h += '<button class="done-btn' + (v._done ? " on" : "") + '" id="doneBtn">' + doneLabel(v._done) + "</button>";
-    h += '<div class="actions"><button class="btn" id="copyCard">📋 ' + E("Нусха олиш") + '</button><button class="btn" id="shareCard">↗️ ' + E("Улашиш") + "</button></div>";
+    h += '<div class="actions three"><button class="btn" id="pdfCard">📄 PDF</button><button class="btn" id="copyCard">📋 ' + E("Нусха") + '</button><button class="btn" id="shareCard">↗️ ' + E("Улашиш") + "</button></div>";
 
     var prev = CARDS[c.idx - 1], next = CARDS[c.idx + 1];
     h += '<div class="pager">';
@@ -746,7 +752,8 @@
 
     h += '<div class="section-label">' + E("Жавоблар матни") + "</div>";
     h += '<div class="card stack"><p class="muted small" style="margin:0">' + E("Барча тўлдирилган карталар битта матнга йиғилади. Уни исталган чатга (масалан, «Сақланган хабарлар»га) жойлаштиришингиз мумкин.") + "</p>";
-    h += '<button class="btn primary" id="copyAll" style="width:100%">📋 ' + E("Барча жавобларни нусхалаш") + "</button>";
+    h += '<button class="btn primary" id="pdfAll" style="width:100%">📄 ' + E("PDF сифатида сақлаш") + "</button>";
+    h += '<button class="btn" id="copyAll" style="width:100%">📋 ' + E("Барча жавобларни нусхалаш") + "</button>";
     if (!inTG) h += '<button class="btn" id="dlAll" style="width:100%">⬇️ ' + E("Файл (.txt) сифатида юклаб олиш") + "</button>";
     h += "</div>";
 
@@ -911,6 +918,7 @@
       });
     }
     if (r.name === "settings") bindSettings();
+    if (r.name === "home") document.getElementById("pdfHome").addEventListener("click", function () { window.GTPdf.save(); });
     if (r.name === "welcome") bindWelcome();
   }
 
@@ -928,6 +936,10 @@
         var next = CARDS[c.idx + 1];
         toast(next ? "Зўр! Кейинги карта: " + next.n + "-карта" : "Табриклаймиз! Дафтар якунланди 🎉");
       }
+    });
+    document.getElementById("pdfCard").addEventListener("click", function () {
+      if (!cardStat(c).filled) return toast("Бу картада ҳали жавоб йўқ");
+      window.GTPdf.save({ card: c });
     });
     document.getElementById("copyCard").addEventListener("click", function () {
       var t = cardText(c);
@@ -1060,6 +1072,7 @@
   }
 
   function bindExport() {
+    document.getElementById("pdfAll").addEventListener("click", function () { window.GTPdf.save(); });
     document.getElementById("copyAll").addEventListener("click", function () {
       var t = allText();
       copy(t);
@@ -1137,7 +1150,7 @@
       if (!a || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) document.body.classList.remove("kb");
     }, 80);
   });
-  window.addEventListener("hashchange", render);
+  window.addEventListener("hashchange", function () { if (!/^#pdf=/.test(location.hash)) render(); });
 
   if (tg) {
     try {
@@ -1178,13 +1191,45 @@
     else if (s && secById(s[1])) location.hash = "#/s/" + s[1];
   }
 
+  window.GTApp = {
+    WB: WB, CARDS: CARDS, T: T, toLatin: toLatin, esc: esc, filled: filled, cardStat: cardStat,
+    get: function (k) { return Store.get(k); }, all: function () { return Store.all(); },
+    cardByN: function (n) { return CARD_BY_N[n]; },
+    inTG: inTG, tg: tg, toast: toast, haptic: haptic, prefs: prefs,
+    snapshot: function (d, script) { Store.snapshot(d); if (script) prefs.script = script; }
+  };
+
+  // Ташқи браузерда «#pdf=...» ҳаволаси: PDF яратиш ва юклаб олиш
+  function pdfLanding(payload) {
+    $top.hidden = true;
+    document.body.classList.remove("has-tabs");
+    var box = function (title, body) {
+      $app.innerHTML = '<div class="welcome view fade"><div class="w-logo"><svg viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" rx="18" fill="#254C3B"/><path d="M19 17h19a7 7 0 0 1 7 7v23H26a7 7 0 0 1-7-7z" fill="none" stroke="#C99A5B" stroke-width="4" stroke-linejoin="round"/><path d="M26 27h12M26 34h9" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></div>' +
+        '<div class="w-kicker">GLOBALTRAININGS</div><h1>' + title + "</h1>" + body + "</div>";
+    };
+    box("PDF…", '<div class="loading" style="height:auto;margin-top:24px"><div class="spinner"></div></div>');
+    window.GTPdf.fromLink(payload).then(function (res) {
+      box(E("PDF тайёр"), '<p class="w-alt">' + esc(res.name) + '</p><button class="btn primary" id="dl" style="width:100%;margin-top:28px;padding:16px;font-size:16px"><b>⬇️ ' + E("PDF'ни юклаб олиш") + "</b></button>" +
+        '<p class="w-note">' + E("Файл телефонингизнинг «Юклаб олинганлар» (Downloads) папкасига сақланади. Кейин бу саҳифани ёпиб, Telegram'га қайтишингиз мумкин.") + "</p>");
+      document.getElementById("dl").addEventListener("click", function () { window.GTPdf.download(res.blob, res.name); });
+      try { window.GTPdf.download(res.blob, res.name); } catch (e) {}
+    }).catch(function () {
+      box(E("Ҳавола нотўғри"), '<p class="w-alt">' + E("PDF ҳаволаси бузилган ёки тўлиқ эмас. Илованинг ўзидан қайта уриниб кўринг.") + "</p>");
+    });
+  }
+
   function boot() {
+    if (/^#pdf=/.test(location.hash)) return pdfLanding(location.hash.slice(5));
     // Ёзув танлови бошқа қурилмадан (Telegram булутидан) келган бўлса
     var cp = Store.get("prefs");
     if (!prefs.chosen && cp.script) { prefs.script = cp.script; prefs.chosen = true; savePrefs(); }
     render();
   }
-  Store.load().then(boot, boot);
+  // pdf.js ва бошқа скриптлар юклангандан кейин бошлаш
+  var domReady = new Promise(function (resolve) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", resolve); else resolve();
+  });
+  Promise.all([Store.load(), domReady]).then(boot, boot);
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
