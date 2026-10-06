@@ -69,9 +69,13 @@
     return out;
   }
 
+  // Ҳар бир Telegram фойдаланувчиси учун алоҳида жой: битта телефонда бир нечта
+  // аккаунт бўлса ҳам, бировнинг жавоблари бошқасига кўринмайди.
+  var UID = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || "";
+  var NS = UID ? "u" + UID + "_" : "";
   var prefs = { script: "lat", chosen: false, last: null, fs: true };
   try {
-    var savedPrefs = JSON.parse(localStorage.getItem("gt_prefs") || "{}");
+    var savedPrefs = JSON.parse(localStorage.getItem("gt_prefs" + NS) || "{}");
     if (savedPrefs.script && savedPrefs.chosen === undefined) savedPrefs.chosen = true;
     Object.assign(prefs, savedPrefs);
   } catch (e) {}
@@ -81,14 +85,15 @@
     var m = /(?:^|[?&_])(lat|cyr)(?:$|[&_=])/.exec(location.search + "&" + START);
     if (m) { prefs.script = m[1]; prefs.chosen = true; }
   })();
-  function savePrefs() { try { localStorage.setItem("gt_prefs", JSON.stringify(prefs)); } catch (e) {} }
+  function syncPrefs() { Store.set("prefs", { script: prefs.script, last: prefs.last }, true); }
+  function savePrefs() { try { localStorage.setItem("gt_prefs" + NS, JSON.stringify(prefs)); } catch (e) {} }
   function T(s) { return prefs.script === "lat" ? toLatin(String(s)) : String(s); }
   function E(s) { return esc(T(s)); }
 
   /* ================= Сақлаш (Telegram CloudStorage + localStorage) ================= */
 
   var Store = (function () {
-    var LS = "gt_wb_";
+    var LS = "gt_wb_" + NS;
     var CHUNK = 3900;
     var cloud = !!(tg && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast("6.9") && inTG);
     var data = {};
@@ -100,7 +105,10 @@
       try {
         for (var i = 0; i < localStorage.length; i++) {
           var k = localStorage.key(i);
-          if (k.indexOf(LS) === 0) out[k.slice(LS.length)] = JSON.parse(localStorage.getItem(k));
+          if (k.indexOf(LS) !== 0) continue;
+          var rest = k.slice(LS.length);
+          if (!NS && /^u\d+_/.test(rest)) continue; // бошқа Telegram фойдаланувчисининг маълумоти
+          out[rest] = JSON.parse(localStorage.getItem(k));
         }
       } catch (e) {}
       return out;
@@ -172,10 +180,17 @@
         data[k] = { u: Date.now(), v: v };
         try { localStorage.setItem(LS + k, JSON.stringify(data[k])); } catch (e) {}
         clearTimeout(timers[k]);
-        timers[k] = setTimeout(function () { writeCloud(k, data[k]); }, 700);
+        timers[k] = setTimeout(function () { delete timers[k]; writeCloud(k, data[k]); }, 500);
         if (!silent) flash();
       },
       all: function () { return data; },
+      // Кутилаётган ёзувларни дарҳол булутга юбориш (илова ёпилаётганда)
+      flush: function () {
+        Object.keys(timers).forEach(function (k) {
+          clearTimeout(timers[k]); delete timers[k];
+          if (data[k]) writeCloud(k, data[k]);
+        });
+      },
       // Ҳаволадан келган жавобларни фақат кўрсатиш учун (сақламасдан) юклаш
       snapshot: function (d) { data = d || {}; readOnly = true; },
       replaceAll: function (obj) {
@@ -418,7 +433,7 @@
   function viewCard(n) {
     var c = CARD_BY_N[n];
     if (!c) return viewHome();
-    prefs.last = c.n; savePrefs();
+    if (prefs.last !== c.n) { prefs.last = c.n; savePrefs(); syncPrefs(); }
     var v = Store.get("c" + c.n);
     var st = cardStat(c);
     var h = '<div class="crumb"><button data-go="#/s/' + c.sec.id + '">' + esc(c.sec.icon) + " " + E(secLabel(c.sec)) + "</button>" + (c.sec.final ? "" : "<span>·</span><span>" + E(c.sec.title) + "</span>") + "</div>";
@@ -774,7 +789,7 @@
     prefs.script = sc;
     prefs.chosen = true;
     savePrefs();
-    Store.set("prefs", { script: sc }, true);
+    syncPrefs();
     haptic();
     var y = window.scrollY;
     navDir = "none";
@@ -835,7 +850,7 @@
         prefs.script = b.getAttribute("data-pick");
         prefs.chosen = true;
         savePrefs();
-        Store.set("prefs", { script: prefs.script }, true);
+        syncPrefs();
         haptic("ok");
         stack = [];
         lastRoute = null;
@@ -1150,6 +1165,8 @@
       if (!a || !/^(INPUT|TEXTAREA)$/.test(a.tagName)) document.body.classList.remove("kb");
     }, 80);
   });
+  document.addEventListener("visibilitychange", function () { if (document.hidden) Store.flush(); });
+  window.addEventListener("pagehide", function () { Store.flush(); });
   window.addEventListener("hashchange", function () { if (!/^#pdf=/.test(location.hash)) render(); });
 
   if (tg) {
@@ -1222,7 +1239,10 @@
     if (/^#pdf=/.test(location.hash)) return pdfLanding(location.hash.slice(5));
     // Ёзув танлови бошқа қурилмадан (Telegram булутидан) келган бўлса
     var cp = Store.get("prefs");
-    if (!prefs.chosen && cp.script) { prefs.script = cp.script; prefs.chosen = true; savePrefs(); }
+    if (!prefs.chosen && cp.script) { prefs.script = cp.script; prefs.chosen = true; }
+    // Охирги очилган карта — бошқа қурилмада ҳам «Давом эттириш»да кўринади
+    if (cp.last && CARD_BY_N[cp.last]) prefs.last = cp.last;
+    savePrefs();
     render();
   }
   // pdf.js ва бошқа скриптлар юклангандан кейин бошлаш

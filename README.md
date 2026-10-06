@@ -5,7 +5,7 @@ GlobalTrainings «Shaxsiy rivojlanish tizimi» kursi ishtirokchisining ish dafta
 ## Imkoniyatlar
 
 - **54 ta karta** — har bir savol, jadval, belgilash ro'yxati va formula to'ldiriladigan maydonga aylantirilgan.
-- **Avtomatik saqlash** — Telegram ichida javoblar **Telegram CloudStorage**'ga yoziladi (boshqa qurilmada ham ochiladi), qo'shimcha ravishda qurilmada ham saqlanadi.
+- **Avtomatik saqlash va davom ettirish** — har bir foydalanuvchining javoblari uning Telegram akkauntiga bog'langan **Telegram CloudStorage**'ga yoziladi (qurilmada ham nusxasi turadi). Keyingi safar — istalgan telefon yoki kompyuterda — oxirgi ochilgan karta «Davom ettirish» tugmasida chiqadi. Bitta telefonda bir nechta Telegram akkaunti bo'lsa ham, har birining javoblari alohida.
 - **Lotin va Kirill** — birinchi ochilishda yozuv tanlanadi (standart: Lotin). Keyin yuqoridagi tugma yoki *Sozlamalar* orqali bir bosishda almashtiriladi. Tanlov Telegram bulutida saqlanadi.
 - **Ilova kabi** — pastki menyu (Asosiy, Bo'limlar, Qidirish, Qaydlar, Sozlamalar), sahifalar orasida silliq o'tishlar, orqaga qaytganda ro'yxatdagi joy saqlanadi, yozayotganda menyu yashirinadi.
 - **To'liq ekran** — Telegram (Android/iOS, Bot API 8.0+) ichida ochilganda butun ekranni egallaydi; Sozlamalarda o'chirib qo'yish mumkin. «Bosh ekranga qo'shish» tugmasi orqali telefon ekraniga ikonka sifatida qo'yiladi.
